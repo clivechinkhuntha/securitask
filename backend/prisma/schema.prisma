@@ -1,0 +1,490 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  firstName    String
+  lastName     String
+  email        String     @unique
+  externalAuthId String?  @unique
+  passwordHash String?
+  isActive     Boolean    @default(true)
+  lastLoginAt  DateTime?
+  roles        UserRole[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([isActive])
+}
+
+model Role {
+  id           String           @id @default(cuid())
+  name         String           @unique
+  description  String?
+  isSystemRole Boolean          @default(false)
+  isActive     Boolean          @default(true)
+  users        UserRole[]
+  permissions  RolePermission[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([isActive])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  module      String
+  action      String
+  key         String           @unique
+  description String?
+  isActive    Boolean          @default(true)
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([module, action])
+  @@index([module, isActive])
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  module     String
+  recordType String
+  recordId   String?
+  oldValues  Json?
+  newValues  Json?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([module, createdAt])
+  @@index([userId, createdAt])
+  @@index([recordType, recordId])
+}
+
+model Client {
+  id             String       @id @default(cuid())
+  code           String       @unique
+  name           String
+  contactPerson  String
+  phone          String
+  email          String?
+  physicalAddress String?
+  billingAddress String?
+  taxNumber      String?
+  notes          String?
+  status         ClientStatus @default(ACTIVE)
+  sites          ClientSite[]
+  contracts      ClientContract[]
+  invoices       Invoice[]
+  payments       Payment[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([status])
+  @@index([name])
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNumber  String        @unique
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  invoiceDate    DateTime
+  dueDate        DateTime
+  notes          String?
+  subtotal       Decimal       @db.Decimal(18, 2)
+  vat            Decimal       @default(0) @db.Decimal(18, 2)
+  wht            Decimal       @default(0) @db.Decimal(18, 2)
+  total          Decimal       @db.Decimal(18, 2)
+  status         InvoiceStatus @default(DRAFT)
+  items          InvoiceItem[]
+  allocations    PaymentAllocation[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([clientId, status])
+  @@index([dueDate, status])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  description String
+  quantity    Decimal  @db.Decimal(18, 2)
+  unitPrice   Decimal  @db.Decimal(18, 2)
+  amount      Decimal  @db.Decimal(18, 2)
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  paymentNumber     String        @unique
+  clientId          String
+  client            Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  paymentDate       DateTime
+  amount            Decimal       @db.Decimal(18, 2)
+  paymentMethod     String
+  accountId         String
+  account           FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  externalReference String?
+  notes             String?
+  status            PaymentStatus @default(RECORDED)
+  allocations       PaymentAllocation[]
+  createdAt         DateTime      @default(now())
+
+  @@index([clientId, paymentDate])
+}
+
+model PaymentAllocation {
+  paymentId String
+  invoiceId String
+  amount    Decimal  @db.Decimal(18, 2)
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([paymentId, invoiceId])
+  @@index([invoiceId])
+}
+
+model ClientSite {
+  id            String           @id @default(cuid())
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  name          String
+  code          String
+  address       String?
+  contactPerson String?
+  contactPhone  String?
+  notes         String?
+  status        ClientSiteStatus @default(ACTIVE)
+  employees     Employee[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([clientId, code])
+  @@index([clientId, status])
+}
+
+model Employee {
+  id              String           @id @default(cuid())
+  employeeNumber  String           @unique
+  firstName       String
+  lastName        String
+  phone           String
+  email           String?
+  nationalId      String?
+  jobTitle        String
+  employeeType    EmployeeType
+  basicSalary     Decimal          @db.Decimal(18, 2)
+  status          EmployeeStatus  @default(ACTIVE)
+  dateJoined      DateTime
+  assignedSiteId  String?
+  assignedSite    ClientSite?      @relation(fields: [assignedSiteId], references: [id], onDelete: SetNull)
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  payrollItems    PayrollItem[]
+  advances        EmployeeAdvance[]
+
+  @@index([status, employeeType])
+  @@index([assignedSiteId])
+  @@index([lastName, firstName])
+}
+
+model EmployeeAdvance {
+  id                String        @id @default(cuid())
+  advanceNumber     String        @unique
+  employeeId        String
+  employee          Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  advanceDate       DateTime
+  amount            Decimal       @db.Decimal(18, 2)
+  reason            String
+  accountId         String?
+  account           FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  externalReference String?
+  notes             String?
+  status            AdvanceStatus @default(OUTSTANDING)
+  recoveries        AdvanceRecovery[]
+  createdAt         DateTime      @default(now())
+
+  @@index([employeeId, status])
+}
+
+model AdvanceRecovery {
+  id          String          @id @default(cuid())
+  advanceId   String
+  advance     EmployeeAdvance @relation(fields: [advanceId], references: [id], onDelete: Restrict)
+  recoveryDate DateTime
+  amount      Decimal         @db.Decimal(18, 2)
+  notes       String?
+  createdAt   DateTime        @default(now())
+
+  @@index([advanceId, recoveryDate])
+}
+
+model PayrollRun {
+  id          String        @id @default(cuid())
+  name        String
+  periodStart DateTime
+  periodEnd   DateTime
+  status      PayrollStatus @default(DRAFT)
+  paymentDate DateTime?
+  accountId   String?
+  account     FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  items       PayrollItem[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([periodStart, periodEnd])
+  @@index([status, periodEnd])
+}
+
+model PayrollItem {
+  id              String     @id @default(cuid())
+  payrollRunId    String
+  payrollRun      PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Restrict)
+  employeeId      String
+  employee        Employee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  basicSalary     Decimal    @db.Decimal(18, 2)
+  allowances      Decimal    @default(0) @db.Decimal(18, 2)
+  overtime        Decimal    @default(0) @db.Decimal(18, 2)
+  otherEarnings   Decimal    @default(0) @db.Decimal(18, 2)
+  deductions      Decimal    @default(0) @db.Decimal(18, 2)
+  advanceDeduction Decimal   @default(0) @db.Decimal(18, 2)
+  netPay          Decimal    @db.Decimal(18, 2)
+
+  @@unique([payrollRunId, employeeId])
+}
+
+model FinancialAccount {
+  id                  String              @id @default(cuid())
+  name                String
+  accountType         FinancialAccountType
+  bankName            String?
+  accountNumberMasked String?
+  currency            String              @default("MWK")
+  openingBalance      Decimal             @default(0) @db.Decimal(18, 2)
+  isActive            Boolean             @default(true)
+  notes               String?
+  transactions        AccountTransaction[]
+  expenses            Expense[]
+  payments            Payment[]
+  payrollRuns         PayrollRun[]
+  advances            EmployeeAdvance[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([accountType, isActive])
+}
+
+model AccountTransaction {
+  id                String                    @id @default(cuid())
+  accountId         String
+  account           FinancialAccount          @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  transactionType   AccountTransactionType
+  transactionDate   DateTime
+  amount            Decimal                   @db.Decimal(18, 2)
+  direction         AccountTransactionDirection
+  referenceType     String?
+  referenceId       String?
+  externalReference String?
+  description       String?
+  status            AccountTransactionStatus @default(POSTED)
+  createdById       String?
+  createdAt         DateTime                  @default(now())
+
+  @@index([accountId, transactionDate])
+  @@index([referenceType, referenceId])
+}
+
+model ExpenseCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  expenses    Expense[]
+
+  @@index([isActive])
+}
+
+model Expense {
+  id                String        @id @default(cuid())
+  expenseNumber     String        @unique
+  expenseDate       DateTime
+  categoryId        String
+  category          ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  description       String
+  amount            Decimal       @db.Decimal(18, 2)
+  supplier           String?
+  paymentMethod     String?
+  accountId         String?
+  account           FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  externalReference String?
+  notes             String?
+  status            ExpenseStatus @default(RECORDED)
+  createdById       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([expenseDate, status])
+  @@index([categoryId])
+  @@index([accountId])
+}
+
+model ClientContract {
+  id            String         @id @default(cuid())
+  clientId      String
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  contractNumber String        @unique
+  startDate     DateTime
+  endDate       DateTime?
+  monthlyCharge Decimal        @db.Decimal(18, 2)
+  paymentTerms  String
+  description   String?
+  notes         String?
+  status        ContractStatus @default(DRAFT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([clientId, status])
+  @@index([startDate, endDate])
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientSiteStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  ARCHIVED
+}
+
+enum EmployeeType {
+  GUARD
+  SUPERVISOR
+  MANAGER
+  OFFICE_STAFF
+  DRIVER
+  OTHER
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+  INACTIVE
+}
+
+enum FinancialAccountType {
+  BANK
+  CASH
+  MOBILE_MONEY_RECORD
+  OTHER
+}
+
+enum AccountTransactionDirection {
+  CREDIT
+  DEBIT
+}
+
+enum AccountTransactionStatus {
+  POSTED
+  REVERSED
+  VOIDED
+}
+
+enum AccountTransactionType {
+  OPENING_BALANCE
+  CLIENT_PAYMENT
+  EXPENSE
+  PAYROLL_PAYMENT
+  ADVANCE_ISSUE
+  DEPOSIT
+  WITHDRAWAL
+  TRANSFER
+  BANK_CHARGE
+  ADJUSTMENT
+  REVERSAL
+}
+
+enum ExpenseStatus {
+  RECORDED
+  APPROVED
+  PAID
+  VOIDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  RECORDED
+  REVERSED
+}
+
+enum PayrollStatus {
+  DRAFT
+  REVIEWED
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum AdvanceStatus {
+  OUTSTANDING
+  PARTIALLY_RECOVERED
+  RECOVERED
+  CANCELLED
+}
