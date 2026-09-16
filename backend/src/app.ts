@@ -31,6 +31,10 @@ app.get("/health", (_request, response) => {
   response.json({ status: "ok", service: "securitask-api" });
 });
 
+app.get("/api/health", (_request, response) => {
+  response.json({ status: "ok", service: "securitask-api" });
+});
+
 app.use((_request, response) => {
   response.status(404).json({ error: "Not found" });
 });
