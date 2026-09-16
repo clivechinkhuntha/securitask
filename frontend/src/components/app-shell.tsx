@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession, type AuthSession } from "@/lib/auth";
-import { neonAuth } from "@/lib/neon-auth";
 
 type IconName = "dashboard" | "clients" | "invoice" | "payment" | "bank" | "expense" | "payroll" | "advance" | "report" | "admin" | "audit" | "settings";
 
@@ -29,9 +28,9 @@ export function AppShell({ session, children }: { session: AuthSession; children
   const [isMenuOpen, setIsMenuOpen] = useState(false); const [isProfileOpen, setIsProfileOpen] = useState(false); const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); const [isLightTheme, setIsLightTheme] = useState(false);
   const items = navigation.filter((item) => !item.permission || session.permissions.includes(item.permission));
   const displayName = `${session.user.firstName} ${session.user.lastName}`.trim();
-  const signOut = async () => {
-    try { if (!session.isDemo) await neonAuth.adapter.signOut(); }
-    finally { clearSession(); router.replace("/login"); }
+  const signOut = () => {
+    clearSession();
+    router.replace("/login");
   };
   useEffect(() => { const savedTheme = localStorage.getItem("securitask.theme"); const light = savedTheme === "light"; setIsLightTheme(light); document.documentElement.dataset.theme = light ? "light" : "dark"; }, []);
   const toggleTheme = () => { const light = !isLightTheme; setIsLightTheme(light); localStorage.setItem("securitask.theme", light ? "light" : "dark"); document.documentElement.dataset.theme = light ? "light" : "dark"; };
