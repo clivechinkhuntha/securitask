@@ -1,6 +1,5 @@
 import express from "express";
 import pino from "pino";
-import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { adminRouter } from "./modules/admin/admin.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
@@ -42,7 +41,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
     return;
   }
 
-  if (error instanceof Prisma.PrismaClientInitializationError) {
+  if (error instanceof Error && error.name === "PrismaClientInitializationError") {
     logger.error(error, "Database connection failed");
     response.status(503).json({ error: "The database is currently unavailable. Check the Neon connection strings and try again." });
     return;
