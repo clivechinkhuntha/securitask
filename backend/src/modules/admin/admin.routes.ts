@@ -24,7 +24,7 @@ async function ensureSingleSuperAdministrator(roleIds: string[], userId?: string
 }
 
 const userSelection = {
-  id: true, firstName: true, lastName: true, email: true, externalAuthId: true,
+  id: true, firstName: true, lastName: true, email: true, externalAuthId: true, passwordHash: true,
   isActive: true, lastLoginAt: true, createdAt: true, roles: { include: { role: true } },
 } as const;
 
@@ -59,7 +59,7 @@ adminRouter.put("/roles/:roleId/permissions", requirePermissions("roles.assign_p
 adminRouter.get("/users", requirePermissions("users.view"), async (_request, response, next) => {
   try {
     const users = await prisma.user.findMany({ select: userSelection, orderBy: [{ lastName: "asc" }, { firstName: "asc" }] });
-    response.json(users.map(({ externalAuthId, ...user }) => ({ ...user, isLinkedToNeonAuth: Boolean(externalAuthId) })));
+    response.json(users.map(({ externalAuthId, passwordHash, ...user }) => ({ ...user, isRegistered: Boolean(passwordHash) })));
   } catch (error) { next(error); }
 });
 
@@ -75,9 +75,9 @@ adminRouter.post("/users", requirePermissions("users.create"), async (request, r
       : await prisma.user.create({ data: { firstName: data.firstName, lastName: data.lastName, email: data.email, isActive: data.isActive ?? true }, select: { id: true } });
     await prisma.userRole.createMany({ data: data.roleIds.map((roleId) => ({ userId: provisionedUser.id, roleId })), skipDuplicates: true });
     const user = await prisma.user.findUniqueOrThrow({ where: { id: provisionedUser.id }, select: userSelection });
-    await writeAuditLog({ userId: request.auth!.id, action: "PROVISION", module: "users", recordType: "User", recordId: user.id, newValues: { ...data, activation: "Neon Auth sign-up required" } }, request);
-    const { externalAuthId, ...profile } = user;
-    response.status(existing ? 200 : 201).json({ ...profile, isLinkedToNeonAuth: Boolean(externalAuthId) });
+    await writeAuditLog({ userId: request.auth!.id, action: "PROVISION", module: "users", recordType: "User", recordId: user.id, newValues: { ...data, activation: "Account creation required" } }, request);
+    const { externalAuthId, passwordHash, ...profile } = user;
+    response.status(existing ? 200 : 201).json({ ...profile, isRegistered: Boolean(passwordHash) });
   } catch (error) { next(error); }
 });
 
@@ -87,8 +87,8 @@ adminRouter.put("/users/:userId/roles", requirePermissions("users.update"), asyn
     if (!await ensureSingleSuperAdministrator(data.roleIds, userId)) { response.status(409).json({ error: "Only one user can hold the Super Administrator role." }); return; }
     const user = await prisma.user.update({ where: { id: userId }, data: { roles: { deleteMany: {}, create: data.roleIds.map((roleId) => ({ roleId })) } }, select: userSelection });
     await writeAuditLog({ userId: request.auth!.id, action: "ASSIGN_ROLES", module: "users", recordType: "User", recordId: user.id, newValues: data }, request);
-    const { externalAuthId, ...profile } = user;
-    response.json({ ...profile, isLinkedToNeonAuth: Boolean(externalAuthId) });
+    const { externalAuthId, passwordHash, ...profile } = user;
+    response.json({ ...profile, isRegistered: Boolean(passwordHash) });
   } catch (error) { next(error); }
 });
 
@@ -97,8 +97,8 @@ adminRouter.patch("/users/:userId/status", requirePermissions("users.deactivate"
     const userId = idSchema.parse(request.params.userId); const { isActive } = userStatusSchema.parse(request.body);
     const user = await prisma.user.update({ where: { id: userId }, data: { isActive }, select: userSelection });
     await writeAuditLog({ userId: request.auth!.id, action: isActive ? "ACTIVATE" : "DEACTIVATE", module: "users", recordType: "User", recordId: user.id, newValues: { isActive } }, request);
-    const { externalAuthId, ...profile } = user;
-    response.json({ ...profile, isLinkedToNeonAuth: Boolean(externalAuthId) });
+    const { externalAuthId, passwordHash, ...profile } = user;
+    response.json({ ...profile, isRegistered: Boolean(passwordHash) });
   } catch (error) { next(error); }
 });
 

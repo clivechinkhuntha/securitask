@@ -12,6 +12,7 @@ const employeeSchema = z.object({
   employeeType: z.enum(["GUARD", "SUPERVISOR", "MANAGER", "OFFICE_STAFF", "DRIVER", "OTHER"]), basicSalary: z.string().regex(/^\d+(\.\d{1,2})?$/, "Enter a valid salary amount."),
   status: z.enum(["ACTIVE", "SUSPENDED", "TERMINATED", "INACTIVE"]).optional(), dateJoined: z.coerce.date(), assignedSiteId: idSchema.optional().or(z.literal("")), notes: z.string().trim().max(2_000).optional(),
 });
+const employeeUpdateSchema = employeeSchema.partial();
 
 export const employeeRouter = Router();
 employeeRouter.use(requireAuthentication);
@@ -19,3 +20,40 @@ employeeRouter.get("/", requirePermissions("employees.view"), async (request, re
 employeeRouter.get("/sites", requirePermissions("employees.view"), async (_request, response, next) => { try { response.json(await prisma.clientSite.findMany({ where: { status: "ACTIVE", client: { status: "ACTIVE" } }, select: { id: true, name: true, code: true, client: { select: { name: true } } }, orderBy: { name: "asc" } })); } catch (error) { next(error); } });
 employeeRouter.post("/", requirePermissions("employees.create"), async (request, response, next) => { try { const data = employeeSchema.parse(request.body); const employee = await prisma.employee.create({ data: { ...data, email: data.email || null, assignedSiteId: data.assignedSiteId || null } }); await writeAuditLog({ userId: request.auth!.id, action: "CREATE", module: "employees", recordType: "Employee", recordId: employee.id, newValues: { ...data, dateJoined: data.dateJoined.toISOString() } }, request); response.status(201).json(employee); } catch (error) { next(error); } });
 employeeRouter.get("/:employeeId", requirePermissions("employees.view"), async (request, response, next) => { try { response.json(await prisma.employee.findUniqueOrThrow({ where: { id: idSchema.parse(request.params.employeeId) }, include: { assignedSite: { include: { client: { select: { name: true } } } } } })); } catch (error) { next(error); } });
+employeeRouter.get("/:employeeId/financial-history", requirePermissions("employees.view"), async (request, response, next) => {
+  try {
+    const employeeId = idSchema.parse(request.params.employeeId);
+    const [payrollItems, advances] = await Promise.all([
+      prisma.payrollItem.findMany({ where: { employeeId }, include: { payrollRun: { select: { id: true, name: true, periodStart: true, periodEnd: true, status: true, paymentDate: true } } }, orderBy: { payrollRun: { periodEnd: "desc" } }, take: 12 }),
+      prisma.employeeAdvance.findMany({ where: { employeeId }, include: { recoveries: { orderBy: { recoveryDate: "desc" } } }, orderBy: { advanceDate: "desc" }, take: 12 }),
+    ]);
+    response.json({ payrollItems, advances });
+  } catch (error) { next(error); }
+});
+employeeRouter.patch("/:employeeId", requirePermissions("employees.update"), async (request, response, next) => {
+  try {
+    const employeeId = idSchema.parse(request.params.employeeId);
+    const data = employeeUpdateSchema.parse(request.body);
+    const existing = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId } });
+    const employee = await prisma.employee.update({
+      where: { id: employeeId },
+      data: {
+        ...data,
+        ...(data.email !== undefined ? { email: data.email || null } : {}),
+        ...(data.assignedSiteId !== undefined ? { assignedSiteId: data.assignedSiteId || null } : {}),
+      },
+    });
+    await writeAuditLog({ userId: request.auth!.id, action: "UPDATE", module: "employees", recordType: "Employee", recordId: employee.id, oldValues: { employeeNumber: existing.employeeNumber, status: existing.status, assignedSiteId: existing.assignedSiteId, basicSalary: existing.basicSalary.toString() }, newValues: { employeeNumber: employee.employeeNumber, status: employee.status, assignedSiteId: employee.assignedSiteId, basicSalary: employee.basicSalary.toString() } }, request);
+    response.json(employee);
+  } catch (error) { next(error); }
+});
+employeeRouter.post("/:employeeId/archive", requirePermissions("employees.archive"), async (request, response, next) => {
+  try {
+    const employeeId = idSchema.parse(request.params.employeeId);
+    const existing = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId } });
+    if (existing.status === "TERMINATED" || existing.status === "INACTIVE") { response.json(existing); return; }
+    const employee = await prisma.employee.update({ where: { id: employeeId }, data: { status: "INACTIVE", assignedSiteId: null } });
+    await writeAuditLog({ userId: request.auth!.id, action: "ARCHIVE", module: "employees", recordType: "Employee", recordId: employee.id, oldValues: { status: existing.status, assignedSiteId: existing.assignedSiteId }, newValues: { status: employee.status, assignedSiteId: null } }, request);
+    response.json(employee);
+  } catch (error) { next(error); }
+});
