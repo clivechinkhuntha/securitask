@@ -8,6 +8,28 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model CompanySettings {
+  id            String   @id
+  companyName   String
+  address       String?
+  taxNumber     String?
+  phone         String?
+  email         String?
+  bankName      String?
+  accountName   String?
+  accountNumber String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model NotificationRead {
+  userId String
+  key    String
+  readAt DateTime @default(now())
+
+  @@id([userId, key])
+}
+
 model User {
   id           String     @id @default(cuid())
   firstName    String
@@ -96,6 +118,18 @@ model AuditLog {
   @@index([recordType, recordId])
 }
 
+model ServiceCatalogItem {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  defaultPrice Decimal  @db.Decimal(18, 2)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
 model Client {
   id             String       @id @default(cuid())
   code           String       @unique
@@ -125,13 +159,18 @@ model Invoice {
   clientId       String
   client         Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   invoiceDate    DateTime
-  dueDate        DateTime
+  dueDate        DateTime?
   notes          String?
+  documentSnapshot Json?
   subtotal       Decimal       @db.Decimal(18, 2)
   vat            Decimal       @default(0) @db.Decimal(18, 2)
   wht            Decimal       @default(0) @db.Decimal(18, 2)
   total          Decimal       @db.Decimal(18, 2)
   status         InvoiceStatus @default(DRAFT)
+  cancelledFromStatus InvoiceStatus?
+  cancellationReason String?
+  cancelledAt    DateTime?
+  cancelledById  String?
   items          InvoiceItem[]
   allocations    PaymentAllocation[]
   createdAt      DateTime      @default(now())
@@ -146,6 +185,7 @@ model InvoiceItem {
   invoiceId   String
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   description String
+  remarks     String?
   quantity    Decimal  @db.Decimal(18, 2)
   unitPrice   Decimal  @db.Decimal(18, 2)
   amount      Decimal  @db.Decimal(18, 2)

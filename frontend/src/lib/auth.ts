@@ -19,13 +19,20 @@ export function getSession(): AuthSession | null {
 export function saveSession(session: AuthSession) { sessionStorage.setItem(storageKey, JSON.stringify(session)); }
 export function clearSession() { sessionStorage.removeItem(storageKey); }
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function apiRequest<T>(path: string, token: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...options.headers } });
   const body = await response.json().catch(() => null) as { error?: string; details?: { fieldErrors?: Record<string, string[] | undefined> } } | T | null;
   if (!response.ok) {
     const errorBody = body && typeof body === "object" && "error" in body ? body : null;
     const fieldMessage = errorBody?.details?.fieldErrors ? Object.values(errorBody.details.fieldErrors).flat().find(Boolean) : undefined;
-    throw new Error(fieldMessage ? `${errorBody?.error ?? "Request failed."} ${fieldMessage}` : errorBody?.error ?? "Request failed.");
+    throw new ApiError(fieldMessage ? `${errorBody?.error ?? "Request failed."} ${fieldMessage}` : errorBody?.error ?? "Request failed.", response.status);
   }
   return body as T;
 }

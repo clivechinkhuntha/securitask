@@ -18,6 +18,7 @@ export const authRouter = Router();
 
 const credentialsSchema = z.object({ email: z.string().trim().email().transform((value) => value.toLowerCase()), password: z.string().min(8).max(128) });
 const registrationSchema = credentialsSchema.extend({ firstName: z.string().trim().min(1).max(80), lastName: z.string().trim().min(1).max(80) });
+const profileUpdateSchema = z.object({ firstName: z.string().trim().min(1).max(80), lastName: z.string().trim().min(1).max(80) }).strict();
 
 function issueLocalToken(user: { id: string; email: string }) {
   const secret = process.env.JWT_SECRET;
@@ -86,5 +87,29 @@ authRouter.get("/me", requireAuthentication, async (request, response, next) => 
     if (!user.isActive) { response.status(401).json({ error: "Your account is inactive." }); return; }
     const permissions = effectivePermissions(user.roles);
     response.json({ user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, isActive: user.isActive }, permissions });
+  } catch (error) { next(error); }
+});
+
+authRouter.get("/profile", requireAuthentication, async (request, response, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: request.auth!.id }, select: { id: true, firstName: true, lastName: true, email: true, isActive: true, roles: { where: { role: { isActive: true } }, select: { role: { select: { name: true } } } } } });
+    if (!user || !user.isActive) { response.status(401).json({ error: "Your account is inactive or unavailable." }); return; }
+    response.json({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, isActive: user.isActive, roles: user.roles.map(({ role }) => role.name) });
+  } catch (error) { next(error); }
+});
+
+authRouter.patch("/profile", requireAuthentication, async (request, response, next) => {
+  try {
+    const data = profileUpdateSchema.parse(request.body);
+    const user = await prisma.$transaction(async (transaction) => {
+      const current = await transaction.user.findUnique({ where: { id: request.auth!.id }, select: { id: true, firstName: true, lastName: true, isActive: true } });
+      if (!current || !current.isActive) return null;
+      const changed = await transaction.user.updateMany({ where: { id: current.id, isActive: true }, data });
+      if (!changed.count) return null;
+      await transaction.auditLog.create({ data: { userId: current.id, action: "UPDATE_PROFILE", module: "users", recordType: "User", recordId: current.id, oldValues: { firstName: current.firstName, lastName: current.lastName }, newValues: data, ipAddress: request.ip, userAgent: request.get("user-agent") } });
+      return transaction.user.findUniqueOrThrow({ where: { id: current.id }, select: { id: true, firstName: true, lastName: true, email: true, isActive: true, roles: { where: { role: { isActive: true } }, select: { role: { select: { name: true } } } } } });
+    });
+    if (!user) { response.status(401).json({ error: "Your account is inactive or unavailable." }); return; }
+    response.json({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, isActive: user.isActive, roles: user.roles.map(({ role }) => role.name) });
   } catch (error) { next(error); }
 });

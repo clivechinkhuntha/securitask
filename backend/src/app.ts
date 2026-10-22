@@ -1,6 +1,7 @@
 import express from "express";
 import pino from "pino";
 import { ZodError } from "zod";
+import { Prisma } from "@prisma/client";
 import { adminRouter } from "./modules/admin/admin.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { clientRouter } from "./modules/clients/client.routes.js";
@@ -10,6 +11,9 @@ import { revenueRouter } from "./modules/revenue/revenue.routes.js";
 import { payrollRouter } from "./modules/payroll/payroll.routes.js";
 import { advanceRouter } from "./modules/advances/advance.routes.js";
 import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
+import { servicesRouter } from "./modules/services/service.routes.js";
+import { settingsRouter } from "./modules/settings/settings.routes.js";
+import { notificationsRouter } from "./modules/notifications/notifications.routes.js";
 
 const logger = pino({ name: "securitask-api" });
 
@@ -26,6 +30,9 @@ app.use("/api/revenue", revenueRouter);
 app.use("/api/payroll", payrollRouter);
 app.use("/api/advances", advanceRouter);
 app.use("/api/dashboard", dashboardRouter);
+app.use("/api/services", servicesRouter);
+app.use("/api/settings", settingsRouter);
+app.use("/api/notifications", notificationsRouter);
 
 app.get("/health", (_request, response) => {
   response.json({ status: "ok", service: "securitask-api" });
@@ -45,7 +52,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
     return;
   }
 
-  if (error instanceof Error && error.name === "PrismaClientInitializationError") {
+  if (error instanceof Prisma.PrismaClientInitializationError || (error instanceof Prisma.PrismaClientKnownRequestError && ["P1001", "P1002", "P1017", "P2024"].includes(error.code))) {
     logger.error(error, "Database connection failed");
     response.status(503).json({ error: "The database is currently unavailable. Check the Neon connection strings and try again." });
     return;
