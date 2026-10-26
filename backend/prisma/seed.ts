@@ -13,7 +13,7 @@ const permissions = [
   ["accounts", "view", "View financial accounts"], ["accounts", "create", "Create financial accounts"], ["accounts", "update", "Update financial accounts"],
   ["expense_categories", "view", "View expense categories"], ["expense_categories", "create", "Create expense categories"], ["expense_categories", "update", "Update expense categories"],
   ["invoices", "view", "View invoices"], ["invoices", "create", "Create invoices"], ["invoices", "update", "Update invoices"], ["invoices", "issue", "Issue invoices"], ["invoices", "cancel", "Cancel invoices"], ["invoices", "restore", "Restore cancelled drafts"],
-  ["payments", "view", "View payments"], ["payments", "create", "Record payments"], ["payments", "reverse", "Reverse payments"],
+  ["payments", "view", "View payments"], ["payments", "create", "Record payments"], ["payments", "update", "Update payment details"], ["payments", "reverse", "Reverse payments"],
   ["expenses", "view", "View expenses"], ["expenses", "create", "Record expenses"], ["expenses", "update", "Update expenses"], ["expenses", "approve", "Approve expenses"], ["expenses", "void", "Void expenses"],
   ["payroll", "view", "View payroll"], ["payroll", "create", "Create payroll runs"], ["payroll", "update", "Update payroll runs"], ["payroll", "approve", "Approve payroll"], ["payroll", "mark_paid", "Record payroll payment"],
   ["advances", "view", "View employee advances"], ["advances", "create", "Record employee advances"], ["advances", "update", "Update employee advances"], ["advances", "recover", "Recover employee advances"],

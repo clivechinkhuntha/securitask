@@ -8,7 +8,7 @@ import { requireAuthentication, requirePermissions } from "../auth/auth.middlewa
 
 const amount = z.string().regex(/^\d+(\.\d{1,2})?$/);
 const invoiceSchema = z.object({ clientId: z.string().cuid(), invoiceDate: z.coerce.date(), dueDate: z.preprocess((value) => value === "" || value === null ? undefined : value, z.coerce.date().optional()), notes: z.string().trim().max(2_000).optional(), items: z.array(z.object({ description: z.string().trim().min(1).max(1000), remarks: z.string().trim().max(1000).optional(), quantity: amount.refine((value) => new Prisma.Decimal(value).greaterThan(0), "Quantity must be greater than zero."), unitPrice: amount })).min(1) }).refine((value) => !value.dueDate || value.dueDate >= value.invoiceDate, { path: ["dueDate"], message: "Due date cannot precede invoice date." });
-const paymentSchema = z.object({ paymentNumber: z.string().trim().min(2).transform((value) => value.toUpperCase()), clientId: z.string().cuid(), paymentDate: z.coerce.date(), amount, paymentMethod: z.string().trim().min(2), accountId: z.string().cuid(), externalReference: z.string().trim().max(120).optional(), notes: z.string().trim().max(2_000).optional(), allocations: z.array(z.object({ invoiceId: z.string().cuid(), amount })).min(1) });
+const paymentSchema = z.object({ clientId: z.string().cuid(), paymentDate: z.coerce.date().optional(), amount, paymentMethod: z.string().trim().min(2).default("Bank"), notes: z.string().trim().max(2_000).optional(), allocations: z.array(z.object({ invoiceId: z.string().cuid(), amount })).min(1) });
 const invalid = (message: string) => new z.ZodError([{ code: "custom", path: [], message }]);
 async function refreshInvoiceStatus(transaction: Prisma.TransactionClient, invoiceId: string) {
   const invoice = await transaction.invoice.findUniqueOrThrow({ where: { id: invoiceId }, include: { allocations: { include: { payment: { select: { status: true } } } } } });
@@ -72,10 +72,7 @@ revenueRouter.post("/payments", requirePermissions("payments.create"), async (re
       const paid = invoice.allocations.filter((item) => item.payment.status === "RECORDED").reduce((sum, item) => sum.add(item.amount), new Prisma.Decimal(0));
       if (new Prisma.Decimal(allocation.amount).greaterThan(invoice.total.sub(paid))) throw invalid("Payment allocation exceeds the invoice balance.");
     }
-    const account = await transaction.financialAccount.findUnique({ where: { id: data.accountId }, select: { isActive: true } });
-    if (!account?.isActive) throw invalid("Select an active account.");
-    const created = await transaction.payment.create({ data: { ...data, allocations: { create: data.allocations } } });
-    await transaction.accountTransaction.create({ data: { accountId: data.accountId, transactionType: "CLIENT_PAYMENT", transactionDate: data.paymentDate, amount: data.amount, direction: "CREDIT", referenceType: "Payment", referenceId: created.id, externalReference: data.externalReference, description: `Client payment ${created.paymentNumber}`, createdById: request.auth!.id } });
+    const created = await transaction.payment.create({ data: { ...data, paymentDate: data.paymentDate ?? new Date(), paymentNumber: `PAY-${new Date().getUTCFullYear()}-${randomUUID().toUpperCase()}`, allocations: { create: data.allocations } } });
     for (const id of ids) await refreshInvoiceStatus(transaction, id);
     await transaction.auditLog.create({ data: { userId: request.auth!.id, action: "RECORD", module: "payments", recordType: "Payment", recordId: created.id, newValues: { paymentNumber: created.paymentNumber }, ipAddress: request.ip, userAgent: request.get("user-agent") } });
     return created;
@@ -123,6 +120,19 @@ revenueRouter.post("/invoices/:invoiceId/restore", requirePermissions("invoices.
   });
   response.json(invoice);
 } catch (error) { next(error); } });
+revenueRouter.patch("/payments/:paymentId", requirePermissions("payments.update"), async (request, response, next) => { try {
+  const paymentId = z.string().cuid().parse(request.params.paymentId);
+  const data = z.object({ paymentMethod: z.string().trim().min(2).max(80), notes: z.string().trim().max(2000) }).parse(request.body);
+  const payment = await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`SELECT id FROM "Payment" WHERE id = ${paymentId} FOR UPDATE`;
+    const current = await transaction.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    if (current.status !== "RECORDED") throw invalid("Only recorded payments can be edited.");
+    const updated = await transaction.payment.update({ where: { id: paymentId }, data: { paymentMethod: data.paymentMethod, notes: data.notes || null } });
+    await transaction.auditLog.create({ data: { userId: request.auth!.id, action: "UPDATE", module: "payments", recordType: "Payment", recordId: paymentId, oldValues: { paymentMethod: current.paymentMethod, notes: current.notes }, newValues: { paymentMethod: updated.paymentMethod, notes: updated.notes }, ipAddress: request.ip, userAgent: request.get("user-agent") } });
+    return updated;
+  });
+  response.json(payment);
+} catch (error) { next(error); } });
 revenueRouter.post("/payments/:paymentId/reverse", requirePermissions("payments.reverse"), async (request, response, next) => { try {
   const paymentId = z.string().cuid().parse(request.params.paymentId);
   const { reason } = z.object({ reason: z.string().trim().min(1).max(2000) }).parse(request.body);
@@ -131,7 +141,7 @@ revenueRouter.post("/payments/:paymentId/reverse", requirePermissions("payments.
     for (const id of existing.allocations.map((allocation) => allocation.invoiceId).sort()) await transaction.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${id} FOR UPDATE`;
     const updated = await transaction.payment.updateMany({ where: { id: paymentId, status: "RECORDED" }, data: { status: "REVERSED" } });
     if (updated.count !== 1) throw invalid("Payment has already been reversed.");
-    await transaction.accountTransaction.create({ data: { accountId: existing.accountId, transactionType: "REVERSAL", transactionDate: new Date(), amount: existing.amount, direction: "DEBIT", referenceType: "Payment", referenceId: existing.id, description: `Reversal of payment ${existing.paymentNumber}: ${reason}`, createdById: request.auth!.id } });
+    if (existing.accountId) await transaction.accountTransaction.create({ data: { accountId: existing.accountId, transactionType: "REVERSAL", transactionDate: new Date(), amount: existing.amount, direction: "DEBIT", referenceType: "Payment", referenceId: existing.id, description: `Reversal of payment ${existing.paymentNumber}: ${reason}`, createdById: request.auth!.id } });
     for (const allocation of existing.allocations) await refreshInvoiceStatus(transaction, allocation.invoiceId);
     await transaction.auditLog.create({ data: { userId: request.auth!.id, action: "REVERSE", module: "payments", recordType: "Payment", recordId: paymentId, newValues: { reason }, ipAddress: request.ip, userAgent: request.get("user-agent") } });
     return { ...existing, status: "REVERSED" };

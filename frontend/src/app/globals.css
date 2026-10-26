@@ -57,13 +57,19 @@ html[data-theme="light"] .dashboard-shell .field { background: #fff; border-colo
 html[data-theme="light"] .dashboard-shell .field::placeholder { color: #666; opacity: 1; }
 html[data-theme="light"] .dashboard-shell .sidebar-link-active { color: #0d0d0d !important; }
 html[data-theme="light"] .dashboard-stat-card { background: linear-gradient(145deg, #fff, #f3f3ef); color: #171717; }
+html[data-theme="light"] .invoice-action-menu { background: #fff !important; border-color: #ddd; color: #171717; }
+html[data-theme="light"] .invoice-action-menu a:hover, html[data-theme="light"] .invoice-action-menu button:hover { background: #f2f2ef; }
+html[data-theme="light"] .invoice-action-menu .text-red-300 { color: #a52222; }
 
 @media print {
-  @page { size: A4; margin: 14mm; }
+  @page { size: A4; margin: 0; }
   body * { visibility: hidden; }
   #invoice-print-area, #invoice-print-area * { visibility: visible; }
-  #invoice-print-area { position: absolute; inset: 0; width: 100%; overflow: visible; border-radius: 0; box-shadow: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  #invoice-print-area { position: absolute; inset: 0; width: 100%; padding: 14mm; box-sizing: border-box; overflow: visible; border-radius: 0; box-shadow: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  #invoice-print-area .invoice-preview-notice { display: none; }
   #invoice-print-area .overflow-x-auto { overflow: visible; }
   #invoice-print-area table { min-width: 0; table-layout: fixed; font-size: 10px; overflow-wrap: anywhere; }
   #invoice-print-area tr { break-inside: avoid; }
+  #receipt-print-area, #receipt-print-area * { visibility: visible; }
+  #receipt-print-area { position: absolute; inset: 0; width: 100%; padding: 14mm; box-sizing: border-box; border-radius: 0; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

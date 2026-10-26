@@ -199,8 +199,8 @@ model Payment {
   paymentDate       DateTime
   amount            Decimal       @db.Decimal(18, 2)
   paymentMethod     String
-  accountId         String
-  account           FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  accountId         String?
+  account           FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Restrict)
   externalReference String?
   notes             String?
   status            PaymentStatus @default(RECORDED)

@@ -8,11 +8,11 @@ import { apiRequest, type AuthSession } from "@/lib/auth";
 
 type Summary = {
   currency: string;
-  availableFunds: number | null;
-  receivedThisMonth: number | null;
-  expensesThisMonth: number | null;
+  totalCollected: number | null;
+  totalExpenses: number | null;
   outstandingInvoices: string | null;
   totalEmployees: number | null;
+  totalClients: number | null;
 };
 
 type Card = { key: string; label: string; value: number | string; href: string; format: "money" | "count" };
@@ -37,10 +37,10 @@ function Dashboard({ session }: { session: AuthSession }) {
   const cards = useMemo<Card[]>(() => {
     if (!summary) return [];
     const candidates: (Card | null)[] = [
-      has("accounts.view") && summary.availableFunds !== null ? { key: "funds", label: "Available funds", value: summary.availableFunds, href: "/accounts", format: "money" } : null,
       has("invoices.view") && summary.outstandingInvoices !== null ? { key: "invoices", label: "Outstanding invoices", value: summary.outstandingInvoices, href: "/invoices", format: "money" } : null,
-      has("payments.view") && summary.receivedThisMonth !== null ? { key: "received", label: "Received this month", value: summary.receivedThisMonth, href: "/payments", format: "money" } : null,
-      has("expenses.view") && summary.expensesThisMonth !== null ? { key: "expenses", label: "Expenses this month", value: summary.expensesThisMonth, href: "/expenses", format: "money" } : null,
+      has("payments.view") && summary.totalCollected !== null ? { key: "collected", label: "Total collected", value: summary.totalCollected, href: "/payments", format: "money" } : null,
+      has("expenses.view") && summary.totalExpenses !== null ? { key: "expenses", label: "Total expenses", value: summary.totalExpenses, href: has("reports.view") ? "/reports/expenses" : "/expenses", format: "money" } : null,
+      has("clients.view") && summary.totalClients !== null ? { key: "clients", label: "Total clients", value: summary.totalClients, href: "/clients", format: "count" } : null,
       has("employees.view") && summary.totalEmployees !== null ? { key: "employees", label: "Total employees", value: summary.totalEmployees, href: "/employees", format: "count" } : null,
     ];
     return candidates.filter((card): card is Card => card !== null);

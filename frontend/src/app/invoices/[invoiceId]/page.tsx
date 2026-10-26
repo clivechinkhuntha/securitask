@@ -24,7 +24,7 @@ function InvoiceDetail({ session }: { session: AuthSession }) {
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => window.print()} className="rounded-md bg-[#f4c20d] px-4 py-2 text-sm font-semibold text-[#0d0d0d]">Print / Save as PDF</button>
         {invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && <a href={`https://wa.me/?text=${encodeURIComponent(`Hello, please find invoice ${invoice.invoiceNumber} for MWK ${invoice.total}. I will send the invoice PDF separately.`)}`} target="_blank" rel="noopener noreferrer" className="rounded-md border border-white/20 px-4 py-2 text-sm">Share via WhatsApp</a>}
-        <p className="w-full text-xs text-white/55">Choose “Save as PDF” in the print dialog. To send the document, attach the saved PDF in WhatsApp.</p>
+        <p className="w-full text-xs text-white/55">Choose “Save as PDF” in the print dialog and turn off headers and footers if shown. To send the document, attach the saved PDF in WhatsApp.</p>
       </div>
       <InvoicePreview invoice={invoice} />
       <section className="rounded-lg border border-white/15 bg-[#111414] p-4"><h2 className="font-semibold">Services or items</h2><div className="mt-3 divide-y divide-white/10">{invoice.items.map((item) => <div key={item.id} className="flex flex-wrap justify-between gap-2 py-3 text-sm"><span>{item.description} · {item.quantity} × MWK {item.unitPrice}</span><span>MWK {item.amount}</span></div>)}</div>{invoice.notes && <p className="mt-3 text-sm text-white/60">Notes: {invoice.notes}</p>}</section>

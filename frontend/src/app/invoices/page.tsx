@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { useEffect, useState, type FormEvent } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ProtectedPage } from "@/components/protected-page";
@@ -31,6 +32,19 @@ function Invoices({ session }: { session: AuthSession }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [menu, setMenu] = useState<{ invoice: Invoice; top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const dismiss = (event: PointerEvent) => { if (!(event.target as Element).closest("[data-invoice-menu]")) setMenu(null); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
+    const close = () => setMenu(null);
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); window.removeEventListener("resize", close); window.removeEventListener("scroll", close, true); };
+  }, [menu]);
 
   const load = async () => {
     const data = await apiRequest<Invoice[]>("/api/revenue/invoices", session.token);
@@ -85,16 +99,21 @@ function Invoices({ session }: { session: AuthSession }) {
   const filtered = invoices.filter((invoice) => `${invoice.invoiceNumber} ${invoice.client.name}`.toLowerCase().includes(search.toLowerCase()));
   const matchingClients = clients.filter((client) => `${client.name} ${client.code}`.toLowerCase().includes(clientSearch.trim().toLowerCase()));
 
-  const actions = (invoice: Invoice) => <div className="flex flex-wrap gap-2">
-    <Link href={`/invoices/${invoice.id}`} className="rounded-lg border border-white/20 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-[#f4c20d]/60 hover:text-[#f4c20d] focus-visible:outline-2 focus-visible:outline-[#f4c20d]">View</Link>
-    {invoice.status === "DRAFT" && session.permissions.includes("invoices.update") && <button type="button" onClick={() => void openForm(invoice.id)} className="rounded-lg border border-white/20 px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-[#f4c20d]/60 hover:text-[#f4c20d]">Edit</button>}
-    {invoice.status === "DRAFT" && session.permissions.includes("invoices.issue") && <button type="button" onClick={() => void transition(invoice, "issue")} className="rounded-lg bg-[#f4c20d] px-3 py-2 text-xs font-semibold text-[#0d0d0d] transition hover:bg-[#ffda42]">Approve &amp; post</button>}
-    {["DRAFT", "ISSUED", "OVERDUE"].includes(invoice.status) && session.permissions.includes("invoices.cancel") && <button type="button" onClick={() => void transition(invoice, "cancel")} className="rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/10">Cancel</button>}
-    {invoice.status === "CANCELLED" && invoice.cancelledFromStatus === "DRAFT" && session.permissions.includes("invoices.restore") && <button type="button" onClick={() => void transition(invoice, "restore")} className="rounded-lg border border-[#f4c20d]/40 px-3 py-2 text-xs font-semibold text-[#f4c20d] transition hover:bg-[#f4c20d]/10">Restore draft</button>}
-  </div>;
+  const actions = (invoice: Invoice) => <button type="button" data-invoice-menu aria-label={`Actions for ${invoice.invoiceNumber}`} aria-expanded={menu?.invoice.id === invoice.id} aria-haspopup="true" onClick={(event) => {
+    if (menu?.invoice.id === invoice.id) { setMenu(null); return; }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setMenu({ invoice, left: Math.max(8, Math.min(bounds.right - 208, window.innerWidth - 216)), top: Math.max(8, Math.min(bounds.bottom + 6, window.innerHeight - 230)) });
+  }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/20 px-3 text-sm font-medium transition hover:border-[#f4c20d]/60 hover:text-[#f4c20d] focus-visible:outline-2 focus-visible:outline-[#f4c20d]">Actions <span aria-hidden="true">⋮</span></button>;
   const status = (invoice: Invoice) => <span className="inline-flex rounded-full bg-[#f4c20d]/10 px-2.5 py-1 text-xs font-semibold text-[#f4c20d]">{invoiceStatusLabel(invoice.status)}</span>;
 
   return <AppShell session={session}><section className="page-polished mx-auto max-w-7xl space-y-6">
+    {menu && createPortal(<div data-invoice-menu className="invoice-action-menu fixed z-[100] w-52 rounded-xl border border-white/15 bg-[#171919] p-1.5 text-sm text-white shadow-2xl" style={{ top: menu.top, left: menu.left }}>
+      <Link href={`/invoices/${menu.invoice.id}`} onClick={() => setMenu(null)} className="block rounded-lg px-3 py-2.5 transition hover:bg-white/10">View invoice</Link>
+      {menu.invoice.status === "DRAFT" && session.permissions.includes("invoices.update") && <button type="button" onClick={() => { void openForm(menu.invoice.id); setMenu(null); }} className="block w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/10">Edit draft</button>}
+      {menu.invoice.status === "DRAFT" && session.permissions.includes("invoices.issue") && <button type="button" onClick={() => { void transition(menu.invoice, "issue"); setMenu(null); }} className="block w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/10">Approve &amp; post</button>}
+      {["DRAFT", "ISSUED", "OVERDUE"].includes(menu.invoice.status) && session.permissions.includes("invoices.cancel") && <button type="button" onClick={() => { void transition(menu.invoice, "cancel"); setMenu(null); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-red-300 transition hover:bg-red-500/10">Cancel invoice</button>}
+      {menu.invoice.status === "CANCELLED" && menu.invoice.cancelledFromStatus === "DRAFT" && session.permissions.includes("invoices.restore") && <button type="button" onClick={() => { void transition(menu.invoice, "restore"); setMenu(null); }} className="block w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/10">Restore draft</button>}
+    </div>, document.body)}
     <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#f4c20d]">Revenue management</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Invoices</h1><p className="mt-2 text-sm text-white/60">Create and manage your client invoices.</p></div>{session.permissions.includes("invoices.create") && <button type="button" onClick={() => void openForm()} className="min-h-11 rounded-lg bg-[#f4c20d] px-5 py-2.5 text-sm font-semibold text-[#0d0d0d] transition hover:bg-[#ffda42] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f4c20d]">{showForm ? "Close form" : "+ Create invoice"}</button>}</header>
     {message && <p role="status" className="rounded bg-[#f4c20d]/10 p-3 text-sm text-[#ffe48a]">{message}</p>}
     {showForm && <form key={editing?.id ?? "new"} onSubmit={create} className="space-y-6 rounded-xl border border-white/15 bg-[#111414] p-5 shadow-lg sm:p-6">
