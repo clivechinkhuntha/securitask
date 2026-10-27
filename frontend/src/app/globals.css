@@ -5,6 +5,18 @@
   background: #0d0d0d;
 }
 
+@keyframes word-reveal {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.word-reveal { opacity: 0; transform: translateY(12px); }
+.word-reveal-active { animation: word-reveal 460ms cubic-bezier(.22, 1, .36, 1) forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .word-reveal { opacity: 1; animation: none; transform: none; }
+}
+
 body { margin: 0; }
 
 .sidebar-navigation { scrollbar-width: thin; scrollbar-color: #555 transparent; }
