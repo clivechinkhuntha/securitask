@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession, type AuthSession } from "@/lib/auth";
+import { neonAuth } from "@/lib/neon-auth";
 import { NotificationBell } from "@/components/notification-bell";
 
 type IconName = "dashboard" | "clients" | "employees" | "invoice" | "payment" | "bank" | "expense" | "payroll" | "advance" | "report" | "admin" | "audit" | "settings";
@@ -30,7 +31,8 @@ export function AppShell({ session, children }: { session: AuthSession; children
   const [isMenuOpen, setIsMenuOpen] = useState(false); const [isProfileOpen, setIsProfileOpen] = useState(false); const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); const [isLightTheme, setIsLightTheme] = useState(false);
   const items = navigation.filter((item) => !item.permission || session.permissions.includes(item.permission) || (item.href === "/settings" && session.permissions.includes("settings.view")));
   const displayName = `${session.user.firstName} ${session.user.lastName}`.trim();
-  const signOut = () => {
+  const signOut = async () => {
+    if (!session.isDemo) await neonAuth.adapter.signOut().catch(() => undefined);
     clearSession();
     router.replace("/login");
   };

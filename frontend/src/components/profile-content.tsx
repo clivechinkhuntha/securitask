@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { apiRequest, clearSession, saveSession, type AuthSession } from "@/lib/auth";
+import { neonAuth } from "@/lib/neon-auth";
 
 type Profile = { id: string; firstName: string; lastName: string; email: string; isActive: boolean; roles: string[] };
 
@@ -38,7 +39,7 @@ export function ProfileContent({ session }: { session: AuthSession }) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update your profile."); }
     finally { setSaving(false); }
   };
-  const logout = () => { clearSession(); router.replace("/login"); };
+  const logout = async () => { if (!session.isDemo) await neonAuth.adapter.signOut().catch(() => undefined); clearSession(); router.replace("/login"); };
 
   return <AppShell session={currentSession}><section className="page-polished mx-auto max-w-3xl space-y-6 pb-6">
     <header><p className="text-xs font-bold uppercase tracking-[.18em] text-[#f4c20d]">Account</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">My profile</h1><p className="mt-2 text-sm text-white/55">Manage your personal details and see your access.</p></header>

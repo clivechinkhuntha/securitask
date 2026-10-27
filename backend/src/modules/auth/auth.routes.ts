@@ -69,19 +69,15 @@ authRouter.get("/me", requireAuthentication, async (request, response, next) => 
     let user = await prisma.user.findUnique({ where: { externalAuthId }, include: userWithRoles });
 
     if (!user) {
-      const [firstName = "User", ...remainingNames] = email.split("@")[0].split(/[._-]/).filter(Boolean);
+      // Neon Auth proves who signed in; Securitask still decides who is allowed
+      // into this workspace. An administrator must add the staff email first.
       const existingEmailUser = await prisma.user.findUnique({ where: { email } });
-      user = existingEmailUser
-        ? await prisma.user.update({ where: { id: existingEmailUser.id }, data: { externalAuthId }, include: userWithRoles })
-        : await prisma.user.create({ data: { externalAuthId, email, firstName, lastName: remainingNames.join(" ") || "User" }, include: userWithRoles });
-
-      if (process.env.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase() === email) {
-        const superAdmin = await prisma.role.findUnique({ where: { name: "Super Administrator" } });
-        if (superAdmin) await prisma.userRole.upsert({ where: { userId_roleId: { userId: user.id, roleId: superAdmin.id } }, update: {}, create: { userId: user.id, roleId: superAdmin.id } });
-        user = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: userWithRoles });
+      if (!existingEmailUser) {
+        response.status(403).json({ error: "Your email has not been added to Securitask. Ask an administrator to add you first." });
+        return;
       }
-
-      await writeAuditLog({ userId: user.id, action: "PROFILE_PROVISIONED", module: "auth", recordType: "User", recordId: user.id, metadata: { provider: "neon-auth" } }, request);
+      user = await prisma.user.update({ where: { id: existingEmailUser.id }, data: { externalAuthId }, include: userWithRoles });
+      await writeAuditLog({ userId: user.id, action: "NEON_AUTH_LINKED", module: "auth", recordType: "User", recordId: user.id, metadata: { provider: "neon-auth" } }, request);
     }
 
     if (!user.isActive) { response.status(401).json({ error: "Your account is inactive." }); return; }
